@@ -93,6 +93,7 @@
   .act svg { width: 15px; height: 15px; flex: none; }
   .act:active { background: #EAF3FC; }
   .act.done { border-color: var(--ok); color: var(--ok); }
+  .tag-wait { display: inline-block; font-size: 11px; color: #6B7280; background: #F1F3F6; border-radius: 6px; padding: 0 6px; margin-inline-start: 6px; }
   .tag-none { display: inline-block; font-size: 11px; color: var(--bad); background: #FDECEC; border-radius: 6px; padding: 0 6px; margin-inline-start: 6px; }
   .empty { text-align: center; color: var(--mute); padding: 40px 20px; }
   #more { height: 40px; }
@@ -188,7 +189,7 @@
 </div>
 
 <script>
-const API = 'https://script.google.com/macros/s/AKfycbxUjxuVtROKO7MrxHtmBfzOxsjgwgfvWMVodCHxUdxuFszmgTyWMQFavjt82iJ8U0s/exec';
+const API = 'https://script.google.com/macros/s/AKfycbzTBhhzc_T858oUB15Ps60QjetVyVBbwYs3v9CRjGiNeY939PVW2vd87GaR4WIYG56i/exec';
 const LOGO = '/modaqqeq-dashboard/icon-192.png';
 const CAM = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
 const ICO_COPY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
@@ -282,7 +283,7 @@ $('btnBranch').onclick = pickBranch;
 async function openBranch(b) {
   st.branch = b; ls('ii_branch', b);
   $('brName').textContent = b;
-  st.items = []; st.byId = {}; st.onlyIds = null; $('q').value = ''; st.q = '';
+  st.items = []; st.byId = {}; st.peekQ = []; st.peekOff = false; st.onlyIds = null; $('q').value = ''; st.q = '';
   $('list').innerHTML = '<div class="empty"><div class="spin" style="margin:0 auto 10px"></div>بنجيب أصناف الفرع...</div>';
   try {
     await loadItems();
@@ -326,6 +327,7 @@ async function runScan(restart, quiet) {
       first = false;
       st.scan = p; st.scanP = p;
       showProgress();
+      if (p.paused) { await loadItems(); if (!quiet) toast('تجهيز الصور وقف النهارده علشان رصيد السيرفر - بيكمل بكرة لوحده، والأصناف اللي قدامك صورها بتظهر عادي'); quiet = true; break; }
       // القايمة بتظهر وهي بتتجهز (كل شوية)
       if (p.finished || Date.now() - lastLoad > 45000 || (!st.items.length && p.total)) { await loadItems(); lastLoad = Date.now(); }
       if (p.finished) break;
@@ -342,6 +344,8 @@ async function runScan(restart, quiet) {
 // ---------- خط التقدّم: حفظ الصور (الأولوية) أو تجهيز الأصناف ----------
 function scanLine(p) {
   if (!p || p.finished) return null;
+  if (p.paused) return { t: 'تجهيز الصور وقف النهارده (رصيد السيرفر) - بيكمل بكرة • ' + (p.checked || 0).toLocaleString('en-US') + ' من ' + (p.total || 0).toLocaleString('en-US'),
+    pct: p.total ? Math.round(100 * p.checked / p.total) : 0 };
   if (p.stage === 'list' || !p.listed) {
     const est = p.pages ? p.pages * 30 : 0;
     return { t: 'بنجيب أصناف الفرع من البرنامج: ' + (p.total || 0).toLocaleString('en-US') + (est ? ' من حوالي ' + est.toLocaleString('en-US') : ''),
@@ -364,7 +368,7 @@ function showProgress() {
     cls = sv.ph === 'done' ? 'ok' : sv.ph === 'err' ? 'bad' : '';
   } else if (st.scanning || (st.scan && !st.scan.finished && st.scan.stage !== 'none')) {
     line = st.scanP ? scanLine(st.scanP) : { t: 'بنبدأ تجهيز الأصناف...', pct: null };
-    if (line && !st.scanning) line.t += ' (متوقف - دوس تحديث)';
+    if (line && !st.scanning && !(st.scan && st.scan.paused)) line.t += ' (متوقف - دوس تحديث)';
   }
   if (!line) { el.classList.add('hidden'); hh(); return; }
   el.className = 'strip ' + cls + (line.pct == null ? ' busy' : '');
@@ -437,8 +441,33 @@ function more() {
     if (st.sort === 'cat' && it.cat !== lastCat) { html += '<div class="cat">' + esc(it.cat) + '</div>'; lastCat = it.cat; }
     html += rowHtml(it);
   }
+  const from = st.shown;
   st.shown = end;
   list.insertAdjacentHTML('beforeend', html);
+  peek(v.slice(from, end));
+}
+// صور الأصناف اللي ظاهرة قدامك ولسه التجهيز ما وصلهاش: بنجيبها على طول (30 مع بعض)
+function peek(items) {
+  if (st.peekOff) return;
+  st.peekQ = st.peekQ || [];
+  items.forEach(it => { if (it.img === '' && st.peekQ.indexOf(it.id) < 0) st.peekQ.push(it.id); });
+  pumpPeek();
+}
+async function pumpPeek() {
+  if (st.peeking || !st.peekQ || !st.peekQ.length) return;
+  st.peeking = true;
+  const b = st.branch;
+  try {
+    while (st.peekQ.length && st.branch === b && !st.peekOff) {
+      const ids = st.peekQ.splice(0, 30).filter(id => st.byId[id] && st.byId[id].img === '');
+      if (!ids.length) continue;
+      let r;
+      try { r = await api('imgPeek', { branch: b, ids: ids }); }
+      catch (err) { if (/رصيد السيرفر/.test(err.message || '')) { st.peekOff = true; toast(arErr(err), 'bad'); } break; }
+      if (st.branch !== b) break;
+      Object.keys(r.imgs || {}).forEach(id => { const it = st.byId[id]; if (it && !st.busy[id]) { it.img = r.imgs[id]; refreshRow(id); } });
+    }
+  } finally { st.peeking = false; }
 }
 function rowHtml(it) {
   const sv = st.saves[it.id], busy = st.busy[it.id];
@@ -449,7 +478,7 @@ function rowHtml(it) {
       '<span class="cam">' + CAM + '</span>' +
       (busy ? (sv && sv.preview ? '<div class="pbar"><i style="width:' + (sv.pct || 0) + '%"></i></div>' : '<div class="busy"><div class="spin"></div></div>') : '') +
     '</div>' +
-    '<div class="info"><div class="nm">' + esc(it.name) + (it.img === '-' ? '<span class="tag-none">بدون صورة</span>' : '') + '</div>' +
+    '<div class="info"><div class="nm">' + esc(it.name) + (it.img === '-' ? '<span class="tag-none">بدون صورة</span>' : it.img === '' ? '<span class="tag-wait">بتحمّل...</span>' : '') + '</div>' +
     '<div class="sub">' + (it.code ? '<span class="code">' + esc(it.code) + '</span> • ' : '') + esc(it.cat) + '</div></div>' +
     '<div class="acts">' +
       '<button class="act" data-act="copy" data-id="' + it.id + '" title="نسخ اسم الصنف">' + ICO_COPY + 'نسخ</button>' +
