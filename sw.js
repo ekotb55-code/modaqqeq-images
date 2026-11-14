@@ -1,5 +1,5 @@
 // تطبيق صور الأصناف: الصفحة بتتجاب من النت الأول (علشان أي تحديث يظهر على طول)، ولو النت قاطع بتفتح آخر نسخة محفوظة
-const CACHE = 'modaqqeq-images-v5';
+const CACHE = 'modaqqeq-images-v6';
 const SHELL = ['./', './index.html', './manifest.webmanifest', '/modaqqeq-dashboard/icon-192.png', '/modaqqeq-dashboard/logo_wide.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
