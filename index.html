@@ -161,7 +161,7 @@
       <button class="icon-btn hidden" id="btnBranch" title="تغيير الفرع">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><path d="M5 13v7h14v-7"/></svg>
       </button>
-      <button class="icon-btn hidden" id="btnWm" title="إعدادات اللوجو">
+      <button class="icon-btn" id="btnWm" title="إعدادات اللوجو">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><rect x="12.5" y="12.5" width="5.5" height="5.5" rx="1" fill="currentColor"/></svg>
       </button>
       <button class="icon-btn" id="shareBtn" title="مشاركة التطبيق">
@@ -715,7 +715,6 @@ async function loadWm() {
   try {
     const r = await api('imgWmGet', { have: st.wm ? st.wm.ver : '' });
     st.isAll = !!r.all;
-    $('btnWm').classList.toggle('hidden', !st.isAll);
     if (r.wm) { await setWm(r.wm); ls('ii_wm', JSON.stringify(r.wm)); }
   } catch (e) {}
 }
@@ -791,7 +790,7 @@ async function bulkWm() {
   toast(why || ('اللوجو اتحط على ' + bk.n + ' صورة' + (bk.fail ? ' • ' + bk.fail + ' ما اتحفظتش' : '') + (bk.stop ? ' (وقّفته)' : ' ✓')), why ? 'bad' : 'ok');
 }
 
-// ---------- شاشة إعدادات اللوجو (للدعم بس) ----------
+// ---------- شاشة إعدادات اللوجو (لكل اللي بيدخلوا التطبيق) ----------
 const WM_POS = [['tr', 'فوق يمين'], ['tl', 'فوق شمال'], ['br', 'تحت يمين'], ['bl', 'تحت شمال'], ['c', 'في النص (شفاف)']];
 function openWm() {
   const cur = st.wm || {};
