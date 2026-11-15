@@ -93,6 +93,18 @@
   .act svg { width: 15px; height: 15px; flex: none; }
   .act:active { background: #EAF3FC; }
   .act.done { border-color: var(--ok); color: var(--ok); }
+  .tag-wm { display: inline-block; font-size: 11px; color: #1E8E3E; background: #E8F5EC; border-radius: 6px; padding: 0 6px; margin-inline-start: 6px; }
+  .wm-prev { position: relative; width: 200px; height: 200px; margin: 0 auto 12px; border: 1.5px solid var(--line); border-radius: 12px; overflow: hidden; background: #F1F3F6; direction: ltr; }
+  .wm-prev .bg { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .wm-prev .lg { position: absolute; height: auto; }
+  .wm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+  .wm-grid .opt { margin: 0; text-align: center; padding: 10px 6px; }
+  .wm-grid .opt.wide { grid-column: 1 / 3; }
+  .wm-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; font-weight: 600; }
+  .wm-row input[type=range] { flex: 1; }
+  .wm-row b { min-width: 42px; text-align: left; }
+  .wm-sep { border: 0; border-top: 1.5px solid var(--line); margin: 14px 0; }
+  .wm-note { font-size: 12px; color: #6B7280; margin: 6px 0 10px; line-height: 1.6; }
   .tag-wait { display: inline-block; font-size: 11px; color: #6B7280; background: #F1F3F6; border-radius: 6px; padding: 0 6px; margin-inline-start: 6px; }
   .tag-none { display: inline-block; font-size: 11px; color: var(--bad); background: #FDECEC; border-radius: 6px; padding: 0 6px; margin-inline-start: 6px; }
   .empty { text-align: center; color: var(--mute); padding: 40px 20px; }
@@ -149,6 +161,9 @@
       <button class="icon-btn hidden" id="btnBranch" title="تغيير الفرع">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><path d="M5 13v7h14v-7"/></svg>
       </button>
+      <button class="icon-btn hidden" id="btnWm" title="إعدادات اللوجو">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><rect x="12.5" y="12.5" width="5.5" height="5.5" rx="1" fill="currentColor"/></svg>
+      </button>
       <button class="icon-btn" id="shareBtn" title="مشاركة التطبيق">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="M8.3 10.8l7.4-4.4M8.3 13.2l7.4 4.4"/></svg>
       </button>
@@ -177,6 +192,7 @@
     <span class="sep"></span>
     <button class="chip on" data-s="az">أبجدي</button>
     <button class="chip" data-s="cat">التصنيف</button>
+    <button class="chip hidden" id="wmChip" title="الصور الجديدة تتحفظ بلوجو ولا من غير"></button>
   </div>
   <div class="count" id="count"></div>
   <div id="list"></div>
@@ -184,6 +200,7 @@
 </section>
 
 <input type="file" id="pick" accept="image/*" class="hidden">
+<input type="file" id="pickLogo" accept="image/*" class="hidden">
 <div id="toast" class="hidden"></div>
 
 <div id="scan" class="hidden">
@@ -258,6 +275,7 @@ function afterLogin(r) {
   $('login').classList.add('hidden'); $('main').classList.remove('hidden');
   $('who').textContent = r.name || '';
   $('btnBranch').classList.toggle('hidden', st.branches.length < 2);
+  loadWm();
   const saved = ls('ii_branch');
   const b = st.branches.find(x => x === saved) || (st.branches.length === 1 ? st.branches[0] : '');
   if (b) openBranch(b); else pickBranch();
@@ -324,7 +342,7 @@ function applyItems(c) {
   const local = {};
   st.items.forEach(it => { if (it.local) local[it.id] = it.local; });
   st.base = c.base;
-  st.items = c.items.map(a => ({ id: a[0], name: a[1], code: a[2], cat: a[3] || 'من غير تصنيف', cat0: a[3] || '', img: a[4], key: norm(a[1]), local: local[a[0]] }));
+  st.items = c.items.map(a => ({ id: a[0], name: a[1], code: a[2], cat: a[3] || 'من غير تصنيف', cat0: a[3] || '', img: a[4], wm: a[5] ? 1 : 0, key: norm(a[1]), local: local[a[0]] }));
   st.byId = {};
   st.items.forEach(it => { st.byId[it.id] = it; });
   render();
@@ -356,7 +374,7 @@ function cacheSave() {
     try {
       const db = await idb();
       db.transaction('items', 'readwrite').objectStore('items').put({
-        items: st.items.map(it => [it.id, it.name, it.code, it.cat0, it.img]), base: st.base, hash: st.hash, at: Date.now()
+        items: st.items.map(it => [it.id, it.name, it.code, it.cat0, it.img, it.wm ? 1 : 0]), base: st.base, hash: st.hash, at: Date.now()
       }, ls('ii_email') + '|' + b);
     } catch (e) {}
   }, 2000);
@@ -430,6 +448,10 @@ function showProgress() {
   } else if (st.scanning || (st.scan && !st.scan.finished && st.scan.stage !== 'none')) {
     line = st.scanP ? scanLine(st.scanP) : { t: 'بنبدأ تجهيز الأصناف...', pct: null };
     if (line && !st.scanning && !(st.scan && st.scan.paused)) line.t += ' (متوقف - دوس تحديث)';
+  }
+  if (st.bulk) {
+    line = { t: 'لوجو على كل الصور: ' + st.bulk.n + ' من ' + st.bulk.total + (st.bulk.fail ? ' • ' + st.bulk.fail + ' ما اتحفظتش' : '') + ' - سيب التطبيق مفتوح', pct: Math.round(100 * (st.bulk.n + st.bulk.fail) / st.bulk.total) };
+    cls = '';
   }
   if (!line) { el.classList.add('hidden'); hh(); return; }
   el.className = 'strip ' + cls + (line.pct == null ? ' busy' : '');
@@ -540,11 +562,12 @@ function rowHtml(it) {
       '<span class="cam">' + CAM + '</span>' +
       (busy ? (sv && sv.preview ? '<div class="pbar"><i style="width:' + (sv.pct || 0) + '%"></i></div>' : '<div class="busy"><div class="spin"></div></div>') : '') +
     '</div>' +
-    '<div class="info"><div class="nm">' + esc(it.name) + (it.img === '-' ? '<span class="tag-none">بدون صورة</span>' : it.img === '' ? '<span class="tag-wait">بتحمّل...</span>' : '') + '</div>' +
+    '<div class="info"><div class="nm">' + esc(it.name) + (it.img === '-' ? '<span class="tag-none">بدون صورة</span>' : it.img === '' ? '<span class="tag-wait">بتحمّل...</span>' : it.wm ? '<span class="tag-wm">✓ لوجو</span>' : '') + '</div>' +
     '<div class="sub">' + (it.code ? '<span class="code">' + esc(it.code) + '</span> • ' : '') + esc(it.cat) + '</div></div>' +
     '<div class="acts">' +
       '<button class="act" data-act="copy" data-id="' + it.id + '" title="نسخ اسم الصنف">' + ICO_COPY + 'نسخ</button>' +
       '<button class="act" data-act="google" data-id="' + it.id + '" title="دوّر على صورة الصنف في جوجل">' + ICO_SEARCH + 'جوجل</button>' +
+      (wmReady() && it.img && it.img !== '-' && !it.wm ? '<button class="act" data-act="wm" data-id="' + it.id + '" title="حط اللوجو على الصورة الموجودة وارفعها تاني">＋ لوجو</button>' : '') +
     '</div>' +
   '</div>';
 }
@@ -564,6 +587,12 @@ $('list').addEventListener('click', async e => {
   if (!b) return;
   const it = st.byId[b.dataset.id];
   if (!it) return;
+  if (b.dataset.act === 'wm') {
+    if (st.busy[it.id]) return toast('الصورة لسه بتتحفظ...');
+    if (st.bulk) return toast('اللوجو الجماعي شغال - استنى لما يخلص أو وقّفه');
+    addLogo(it.id, false);
+    return;
+  }
   if (b.dataset.act === 'google') {
     window.open('https://www.google.com/search?tbm=isch&q=' + encodeURIComponent(it.name), '_blank', 'noopener');
     return;
@@ -591,10 +620,16 @@ $('list').addEventListener('click', e => {
   $('pick').value = '';
   $('pick').click();
 });
-$('pick').addEventListener('change', async () => {
+$('pick').addEventListener('change', () => {
   const f = $('pick').files && $('pick').files[0], id = st.target;
-  if (!f || !id) return;
+  if (!f || !id || !st.byId[id]) return;
+  const wm = wmReady() && st.wmOn;
+  saveImage(id, () => squareJpeg(f, 800, 0.82, wm), wm, false);
+});
+// getData = دالة بترجّع الصورة الجاهزة (data:image/jpeg) | wm = عليها لوجو | bulk = من اللوجو الجماعي (من غير رسايل)
+async function saveImage(id, getData, wm, bulk) {
   const it = st.byId[id];
+  let res = { ok: false, err: '' };
   const sv = st.saves[id] = { name: it.name, ph: 'prep', pct: 5, t0: Date.now() };
   st.busy[id] = true; refreshRow(id); showProgress();
   // خلال الرفع والحفظ: النسبة بتزيد بالوقت (السيرفر بياخد حوالي 5 ثواني) لحد ما يرد
@@ -605,40 +640,44 @@ $('pick').addEventListener('change', async () => {
     showProgress(); setRowPct(id, sv.pct);
   }, 300);
   try {
-    const data = await squareJpeg(f, 800, 0.82);
+    const data = await getData();
     sv.preview = data;
     sv.ph = 'up'; sv.pct = 25; sv.t1 = Date.now();
     refreshRow(id); showProgress();
-    const r = await api('imgSet', { branch: st.branch, id: id, image: data });
+    const r = await api('imgSet', { branch: st.branch, id: id, image: data, wm: wm ? 1 : 0 });
     it.img = r.img;
-    it.local = data; // الصورة اللي اتصورت تفضل ظاهرة على طول (من غير ما نستنى البرنامج)
+    it.wm = r.wm ? 1 : 0;
+    if (!bulk) it.local = data; // الصورة اللي اتصورت تفضل ظاهرة على طول (من غير ما نستنى البرنامج)
+    res.ok = true;
     st.hash = ''; cacheSave();
     sv.ph = 'done'; sv.pct = 100;
     delete st.busy[id];
     refreshRow(id);
     const ph = document.querySelector('#it' + id + ' .ph');
     if (ph) ph.classList.add('done');
-    toast('اتحفظت الصورة على البرنامج ✓', 'ok');
+    if (!bulk) toast('اتحفظت الصورة على البرنامج ✓', 'ok');
     $('nNone').textContent = '(' + st.items.filter(x => x.img === '-').length + ')';
   } catch (err) {
     sv.ph = 'err'; sv.pct = 100;
     delete st.busy[id];
     refreshRow(id);
-    if (err.auth) { toast(arErr(err), 'bad'); clearInterval(tick); delete st.saves[id]; showProgress(); return showLogin(); }
-    toast(arErr(err), 'bad');
+    res.err = arErr(err); res.auth = !!err.auth;
+    if (err.auth) { toast(arErr(err), 'bad'); clearInterval(tick); delete st.saves[id]; showProgress(); showLogin(); return res; }
+    if (!bulk) toast(arErr(err), 'bad');
   } finally {
     clearInterval(tick);
     showProgress();
     // الحالة الأخيرة بتفضل ظاهرة شوية وبعدين تختفي
-    setTimeout(() => { if (st.saves[id] === sv) { delete st.saves[id]; showProgress(); } }, sv.ph === 'err' ? 6000 : 2500);
+    setTimeout(() => { if (st.saves[id] === sv) { delete st.saves[id]; showProgress(); } }, bulk ? 600 : sv.ph === 'err' ? 6000 : 2500);
   }
-});
+  return res;
+}
 function setRowPct(id, pct) {
   const b = document.querySelector('#it' + id + ' .pbar i');
   if (b) b.style.width = pct + '%';
 }
 // قص مربع من النص + تصغير ← data:image/jpeg
-async function squareJpeg(file, size, q) {
+async function squareJpeg(file, size, q, wm) {
   let src;
   try { src = await createImageBitmap(file); } catch (e) {
     src = await new Promise((ok, bad) => {
@@ -655,8 +694,188 @@ async function squareJpeg(file, size, q) {
   g.fillStyle = '#fff'; g.fillRect(0, 0, out, out);
   g.imageSmoothingQuality = 'high';
   g.drawImage(src, (w - s) / 2, (h - s) / 2, s, s, 0, 0, out, out);
+  if (wm) stamp(c);
   return c.toDataURL('image/jpeg', q);
 }
+
+// ---------- اللوجو (العلامة المائية) - لوجو واحد وإعداد واحد لكل الفروع ----------
+st.wm = null; st.wmImg = null; st.wmOn = ls('ii_wm_on') !== '0'; st.bulk = null;
+function wmReady() { return !!(st.wm && st.wmImg); }
+function loadImg(src) {
+  return new Promise((ok, bad) => { const im = new Image(); im.onload = () => ok(im); im.onerror = () => bad(new Error('الصورة دي مش بتتفتح - اختار صورة تانية')); im.src = src; });
+}
+async function setWm(w) {
+  st.wm = w;
+  try { st.wmImg = w && w.logo ? await loadImg(w.logo) : null; } catch (e) { st.wmImg = null; }
+  wmChip();
+  if (st.items.length) { const y = window.scrollY; render(); if (y) window.scrollTo(0, y); }
+}
+async function loadWm() {
+  try { const c = JSON.parse(ls('ii_wm') || 'null'); if (c && !st.wm) await setWm(c); } catch (e) {}
+  try {
+    const r = await api('imgWmGet', { have: st.wm ? st.wm.ver : '' });
+    st.isAll = !!r.all;
+    $('btnWm').classList.toggle('hidden', !st.isAll);
+    if (r.wm) { await setWm(r.wm); ls('ii_wm', JSON.stringify(r.wm)); }
+  } catch (e) {}
+}
+function wmChip() {
+  const c = $('wmChip');
+  c.classList.toggle('hidden', !wmReady());
+  c.classList.toggle('on', st.wmOn);
+  c.textContent = st.wmOn ? 'الصور الجديدة بلوجو ✓' : 'الصور الجديدة من غير لوجو';
+}
+$('wmChip').onclick = () => { st.wmOn = !st.wmOn; ls('ii_wm_on', st.wmOn ? '1' : '0'); wmChip(); };
+// مكان اللوجو على الصورة: tr فوق يمين، tl فوق شمال، br تحت يمين، bl تحت شمال، c في النص
+function wmBox(W, H, w, im) {
+  let lw = W * w.size / 100, lh = lw * im.height / im.width;
+  if (lh > H * 0.92) { lh = H * 0.92; lw = lh * im.width / im.height; }
+  const m = Math.round(W * 0.03);
+  if (w.pos === 'c') return { x: (W - lw) / 2, y: (H - lh) / 2, w: lw, h: lh };
+  return { x: w.pos[1] === 'r' ? W - lw - m : m, y: w.pos[0] === 't' ? m : H - lh - m, w: lw, h: lh };
+}
+function stamp(c) {
+  if (!wmReady()) return;
+  const g = c.getContext('2d'), b = wmBox(c.width, c.height, st.wm, st.wmImg);
+  g.save(); g.globalAlpha = st.wm.opacity / 100; g.imageSmoothingQuality = 'high';
+  g.drawImage(st.wmImg, b.x, b.y, b.w, b.h); g.restore();
+}
+// صورة موجودة (من البرنامج) ← نفس الصورة وعليها اللوجو
+async function stampDataUrl(data) {
+  const im = await loadImg(data);
+  const k = Math.min(1, 1000 / Math.max(im.width, im.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+  if (!c.width || !c.height) throw new Error('الصورة اللي على البرنامج مش بتتفتح');
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(im, 0, 0, c.width, c.height);
+  stamp(c);
+  return c.toDataURL('image/jpeg', 0.88);
+}
+function addLogo(id, bulk) {
+  return saveImage(id, async () => {
+    const r = await api('imgGet', { branch: st.branch, id: id, bulk: bulk ? 1 : 0 });
+    return stampDataUrl(r.image);
+  }, true, bulk);
+}
+// اللوجو على كل صور الفرع: صنف صنف بهدوء، وبيقف لوحده لما رصيد السيرفر النهارده يقرّب يخلص، وبيكمل من مكانه المرة الجاية
+function wmTodo() { return st.items.filter(it => it.img && it.img !== '-' && !it.wm); }
+async function bulkWm() {
+  if (st.bulk) { st.bulk.stop = true; return; }
+  if (!wmReady()) return toast('ارفع اللوجو واحفظ الإعدادات الأول', 'bad');
+  const todo = wmTodo().map(it => it.id), b = st.branch;
+  if (!todo.length) return toast('كل صور الفرع عليها اللوجو ✓', 'ok');
+  if (!confirm('هنحط اللوجو على ' + todo.length + ' صورة في فرع "' + b + '" ونرفعهم تاني على البرنامج.\nسيب التطبيق مفتوح لحد ما يخلص. نبدأ؟')) return;
+  const bk = st.bulk = { n: 0, fail: 0, total: todo.length, stop: false };
+  let streak = 0, why = '';
+  showProgress();
+  for (const id of todo) {
+    if (bk.stop || st.branch !== b) break;
+    const it = st.byId[id];
+    if (!it || it.wm || st.busy[id] || !it.img || it.img === '-') continue;
+    const r = await addLogo(id, true);
+    if (r.ok) { bk.n++; streak = 0; }
+    else {
+      if (r.auth) break;
+      if (/رصيد السيرفر/.test(r.err)) { why = r.err; break; }
+      bk.fail++;
+      if (++streak >= 5) { why = 'وقفنا: 5 صور ورا بعض ما اتحفظتش - ' + r.err; break; }
+    }
+    showProgress();
+    await new Promise(z => setTimeout(z, 1500)); // استراحة بين كل صورة والتانية
+  }
+  st.bulk = null;
+  showProgress();
+  toast(why || ('اللوجو اتحط على ' + bk.n + ' صورة' + (bk.fail ? ' • ' + bk.fail + ' ما اتحفظتش' : '') + (bk.stop ? ' (وقّفته)' : ' ✓')), why ? 'bad' : 'ok');
+}
+
+// ---------- شاشة إعدادات اللوجو (للدعم بس) ----------
+const WM_POS = [['tr', 'فوق يمين'], ['tl', 'فوق شمال'], ['br', 'تحت يمين'], ['bl', 'تحت شمال'], ['c', 'في النص (شفاف)']];
+function openWm() {
+  const cur = st.wm || {};
+  const d = { pos: cur.pos || 'br', size: cur.size || 22, opacity: cur.opacity || 80, logo: cur.logo || '', newLogo: undefined };
+  const sample = st.items.find(it => it.img && it.img !== '-');
+  const bg = document.createElement('div');
+  bg.className = 'sheet-bg';
+  bg.innerHTML = '<div class="sheet"><h3>إعدادات اللوجو (لكل الفروع)</h3>' +
+    '<div class="wm-prev"><img class="bg" alt="" src="' + esc(sample ? imgUrl(sample.img) : LOGO) + '"><img class="lg" alt="" id="wmLg"></div>' +
+    '<button class="btn ghost block" id="wmPick" type="button">🖼️ اختار صورة اللوجو</button>' +
+    '<div class="wm-note">الأحسن لوجو PNG بخلفية شفافة.</div>' +
+    '<div class="wm-grid">' + WM_POS.map(p => '<button class="opt' + (p[0] === 'c' ? ' wide' : '') + '" data-p="' + p[0] + '">' + p[1] + '</button>').join('') + '</div>' +
+    '<div class="wm-row"><span>الحجم</span><input type="range" id="wmSize" min="5" max="90"><b id="wmSizeV"></b></div>' +
+    '<div class="wm-row"><span>الوضوح</span><input type="range" id="wmOp" min="5" max="100"><b id="wmOpV"></b></div>' +
+    '<button class="btn block" id="wmSave" type="button">حفظ الإعدادات</button>' +
+    '<button class="btn ghost block" id="wmDel" type="button" style="margin-top:8px">شيل اللوجو خالص</button>' +
+    '<hr class="wm-sep">' +
+    '<button class="btn ghost block" id="wmBulk" type="button"></button>' +
+    '<div class="wm-note">بيحط اللوجو على الصور الموجودة على البرنامج صنف صنف وانت سايب التطبيق مفتوح، وبيقف لوحده لما رصيد السيرفر النهارده يقرّب يخلص. المرة الجاية بيكمل من مكانه، والصورة اللي عليها لوجو ما بيتحطش عليها تاني.</div>' +
+    '<button class="btn ghost block" id="wmClose" type="button">قفل</button></div>';
+  const q = s => bg.querySelector(s);
+  const draw = () => {
+    const lg = q('#wmLg');
+    lg.style.display = d.logo ? '' : 'none';
+    if (d.logo && lg.getAttribute('src') !== d.logo) lg.src = d.logo;
+    lg.style.cssText = (d.logo ? '' : 'display:none;') + 'width:' + d.size + '%;opacity:' + (d.opacity / 100) + ';' +
+      (d.pos === 'c' ? 'left:50%;top:50%;transform:translate(-50%,-50%);' : (d.pos[1] === 'r' ? 'right:3%;' : 'left:3%;') + (d.pos[0] === 't' ? 'top:3%;' : 'bottom:3%;'));
+    bg.querySelectorAll('.wm-grid .opt').forEach(o => o.classList.toggle('on', o.dataset.p === d.pos));
+    q('#wmSize').value = d.size; q('#wmSizeV').textContent = d.size + '%';
+    q('#wmOp').value = d.opacity; q('#wmOpV').textContent = d.opacity + '%';
+    const n = wmTodo().length;
+    q('#wmBulk').textContent = st.bulk ? '⏹ وقّف اللوجو الجماعي' : 'حط اللوجو على كل صور الفرع ده (' + n + ' صورة)';
+  };
+  bg.addEventListener('click', async e => {
+    const o = e.target.closest('.wm-grid .opt');
+    if (o) {
+      d.pos = o.dataset.p;
+      if (d.pos === 'c') { d.size = 60; d.opacity = 25; } else if (d.size > 40) { d.size = 22; d.opacity = 80; }
+      return draw();
+    }
+    if (e.target === bg || e.target.id === 'wmClose') return bg.remove();
+    if (e.target.id === 'wmPick') { st.onLogo = async data => { d.logo = data; d.newLogo = data; draw(); }; $('pickLogo').value = ''; return $('pickLogo').click(); }
+    if (e.target.id === 'wmBulk') { bg.remove(); return bulkWm(); }
+    if (e.target.id === 'wmSave' || e.target.id === 'wmDel') {
+      const del = e.target.id === 'wmDel';
+      if (del && !confirm('نشيل اللوجو؟ الصور الجديدة هتتحفظ من غير لوجو (الصور اللي اتحط عليها قبل كده بتفضل زي ما هي).')) return;
+      if (!del && !d.logo) return toast('اختار صورة اللوجو الأول', 'bad');
+      const body = { pos: d.pos, size: d.size, opacity: d.opacity };
+      if (del) body.logo = ''; else if (d.newLogo !== undefined) body.logo = d.newLogo;
+      e.target.disabled = true;
+      try {
+        const r = await api('imgWmSet', body);
+        await setWm(r.wm); ls('ii_wm', JSON.stringify(r.wm));
+        toast(del ? 'اللوجو اتشال' : 'إعدادات اللوجو اتحفظت ✓', 'ok');
+        bg.remove();
+      } catch (err) { toast(arErr(err), 'bad'); e.target.disabled = false; }
+    }
+  });
+  q('#wmSize').oninput = e => { d.size = Number(e.target.value); draw(); };
+  q('#wmOp').oninput = e => { d.opacity = Number(e.target.value); draw(); };
+  document.body.appendChild(bg);
+  draw();
+}
+$('btnWm').onclick = openWm;
+// اللوجو بيتصغّر (400 بكسل) ويتحفظ PNG علشان الخلفية الشفافة تفضل
+$('pickLogo').addEventListener('change', async () => {
+  const f = $('pickLogo').files && $('pickLogo').files[0];
+  if (!f || !st.onLogo) return;
+  try {
+    const url = URL.createObjectURL(f), im = await loadImg(url);
+    let data = '';
+    for (const max of [400, 280, 200]) {
+      const k = Math.min(1, max / Math.max(im.width, im.height));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(im.width * k)); c.height = Math.max(1, Math.round(im.height * k));
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      data = c.toDataURL('image/png');
+      if (data.length < 380000) break;
+    }
+    URL.revokeObjectURL(url);
+    if (data.length >= 380000) throw new Error('اللوجو كبير قوي - اختار صورة أبسط');
+    st.onLogo(data);
+  } catch (err) { toast(arErr(err), 'bad'); }
+});
 
 // ---------- الباركود ----------
 async function findCode(code) {
